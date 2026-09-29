@@ -39,6 +39,13 @@ class Settings(BaseSettings):
     host: str = Field(default="0.0.0.0", alias="HOST")
     port: int = Field(default=8000, alias="PORT")
 
+    config_db_path: str | None = Field(default=None, alias="CONFIG_DB_PATH")
+    config_encryption_key: str | None = Field(default=None, alias="CONFIG_ENCRYPTION_KEY")
+    config_encryption_key_file: str | None = Field(
+        default=None,
+        alias="CONFIG_ENCRYPTION_KEY_FILE",
+    )
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def split_origins(cls, value: str | List[str]) -> str:

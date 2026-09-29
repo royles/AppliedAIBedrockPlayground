@@ -186,6 +186,7 @@ def update_config(payload: ConfigUpdate) -> PublicConfig:
                 detail="Local provider requires both endpoint URL and model name.",
             )
 
+    runtime_state.persist()
     return _public_config()
 
 

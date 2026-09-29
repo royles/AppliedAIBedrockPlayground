@@ -4,6 +4,7 @@ from threading import Lock
 from typing import Literal
 
 from app.config import get_settings
+from app.config_store import load_persisted_config, save_persisted_config
 
 Provider = Literal["bedrock", "local"]
 
@@ -20,6 +21,31 @@ class RuntimeState:
         self._local_endpoint_url = settings.local_llm_base_url or ""
         self._local_api_token = settings.local_llm_api_token or ""
         self._local_model_id = settings.local_llm_model or "llama3.2"
+        self._apply_persisted_config()
+
+    def _apply_persisted_config(self) -> None:
+        persisted = load_persisted_config()
+        if not persisted:
+            return
+        self._provider = persisted.provider
+        self._model_id = persisted.model_id
+        self._region = persisted.aws_region
+        self._local_endpoint_url = persisted.local_endpoint_url
+        self._local_model_id = persisted.local_model_id or self._local_model_id
+        if persisted.local_api_token:
+            self._local_api_token = persisted.local_api_token
+
+    def persist(self) -> None:
+        """Write current LLM settings to SQLite (token encrypted at rest)."""
+        with self._lock:
+            save_persisted_config(
+                provider=self._provider,
+                model_id=self._model_id,
+                aws_region=self._region,
+                local_endpoint_url=self._local_endpoint_url,
+                local_model_id=self._local_model_id,
+                local_api_token=self._local_api_token,
+            )
 
     def get_provider(self) -> Provider:
         with self._lock:
