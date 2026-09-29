@@ -2,7 +2,7 @@
 
 This tree is a **standalone Bedrock LLM playground** (no Customer 360 monorepo files).
 
-The cloud agent could not push to `git@github.com:royles/AppliedAIBedrockPlayground.git` (403 — `cursor[bot]` is not a collaborator on that repo). Push **`main`** from your machine using your GitHub credentials.
+If automated pushes fail with **403**, add **`cursor[bot]`** as a collaborator on `AppliedAIBedrockPlayground`, then retry from a Cloud Agent. You can also push **`main`** from your machine using your GitHub credentials.
 
 ## Option A — Push this repo directly (SSH)
 
