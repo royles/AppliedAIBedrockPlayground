@@ -72,6 +72,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [pendingAttachments, setPendingAttachments] = useState([]);
+  const [streamMetrics, setStreamMetrics] = useState(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -224,6 +225,27 @@ export default function App() {
     setPendingAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handleClearChat = () => {
+    if (loading) return;
+    setMessages([]);
+    setStreamMetrics(null);
+    setError(null);
+    inputRef.current?.focus();
+  };
+
+  const finalizeStreamMetrics = (requestStart, firstTokenTime, outputChars) => {
+    if (firstTokenTime === null) return;
+    const ttftMs = firstTokenTime - requestStart;
+    const generationMs = performance.now() - firstTokenTime;
+    const tokens = Math.max(1, Math.ceil(outputChars / 4));
+    const tokensPerSec =
+      generationMs > 0 ? (tokens / generationMs) * 1000 : null;
+    setStreamMetrics({
+      ttftMs,
+      tokensPerSec,
+    });
+  };
+
   const handleSend = async () => {
     const trimmed = input.trim();
     if ((!trimmed && !pendingAttachments.length) || loading) return;
@@ -249,14 +271,29 @@ export default function App() {
     setPendingAttachments([]);
     setLoading(true);
     setError(null);
+    setStreamMetrics(null);
 
+    const requestStart = performance.now();
+    let firstTokenTime = null;
+    let outputChars = 0;
     let streamed = false;
 
     try {
       await sendChatStream(chatPayload, {
         onToken: (text) => {
           streamed = true;
+          if (firstTokenTime === null) {
+            firstTokenTime = performance.now();
+            setStreamMetrics({
+              ttftMs: firstTokenTime - requestStart,
+              tokensPerSec: null,
+            });
+          }
+          outputChars += text.length;
           appendAssistantToken(text);
+        },
+        onDone: () => {
+          finalizeStreamMetrics(requestStart, firstTokenTime, outputChars);
         },
       });
     } catch (streamErr) {
@@ -264,6 +301,9 @@ export default function App() {
         try {
           setMessages(nextMessages);
           const response = await sendChat(chatPayload);
+          firstTokenTime = performance.now();
+          outputChars = response.content?.length ?? 0;
+          finalizeStreamMetrics(requestStart, firstTokenTime, outputChars);
           setMessages((prev) => [
             ...prev,
             { role: "assistant", content: response.content },
@@ -276,6 +316,9 @@ export default function App() {
         }
       } else {
         setError(streamErr.message);
+        if (firstTokenTime !== null) {
+          finalizeStreamMetrics(requestStart, firstTokenTime, outputChars);
+        }
       }
     } finally {
       setLoading(false);
@@ -450,6 +493,18 @@ export default function App() {
       )}
 
       <div className="chat-area">
+        <div className="chat-toolbar">
+          <span className="chat-toolbar-label">Conversation</span>
+          <button
+            type="button"
+            className="clear-chat-btn"
+            onClick={handleClearChat}
+            disabled={loading || messages.length === 0}
+            title="Clear messages so the next prompt has no prior context"
+          >
+            Clear chat
+          </button>
+        </div>
         <div className="messages">
           {messages.length === 0 && !loading && (
             <div className="empty-state">
@@ -583,6 +638,24 @@ export default function App() {
             >
               {loading ? "…" : "Send"}
             </button>
+          </div>
+          <div className="stream-metrics" aria-live="polite">
+            <span>
+              Time to first token:{" "}
+              <strong>
+                {streamMetrics?.ttftMs != null
+                  ? `${streamMetrics.ttftMs.toFixed(0)} ms`
+                  : "—"}
+              </strong>
+            </span>
+            <span>
+              Tokens / sec:{" "}
+              <strong>
+                {streamMetrics?.tokensPerSec != null
+                  ? streamMetrics.tokensPerSec.toFixed(1)
+                  : "—"}
+              </strong>
+            </span>
           </div>
         </div>
       </div>
