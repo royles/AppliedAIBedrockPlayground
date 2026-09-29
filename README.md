@@ -119,11 +119,11 @@ In Cloudera AI → **Applications** → **New Application**:
 
 | Field      | Value                      |
 | ---------- | -------------------------- |
-| **Script** | `entry.py` (or `start.py`) |
+| **Script** | `start.py`                 |
 | **Kernel** | Python 3                   |
 
 
-`entry.py` is a thin wrapper that calls `start.py`. On CAI the script will:
+On CAI the script will:
 
 1. Install Python deps into the **active session / application Python environment**
 2. Start FastAPI on `127.0.0.1:$CDSW_APP_PORT` (API + static UI from `frontend/dist`)

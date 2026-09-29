@@ -20,10 +20,13 @@ fi
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 
-if [[ ! -f frontend/dist/index.html ]] && command -v npm >/dev/null 2>&1; then
-  echo "Building frontend (dist missing)..."
+if command -v npm >/dev/null 2>&1; then
+  echo "Installing frontend packages..."
   npm ci --prefix frontend
-  npm run build --prefix frontend
+  if [[ ! -f frontend/dist/index.html ]]; then
+    echo "Building frontend (dist missing)..."
+    npm run build --prefix frontend
+  fi
 fi
 
 echo "Install complete."

@@ -2,9 +2,11 @@
 """
 Bedrock Playground launcher.
 
-Run from the repo root:
+Run from the repo root (also use as the Cloudera AI Application script):
   python start.py
   python start.py --skip-install
+
+Unknown CLI args (e.g. Jupyter ipykernel -f kernel.json on CAI) are ignored.
 
 Automatically picks one of two modes:
 
@@ -80,13 +82,6 @@ def venv_python() -> Path:
     """Return the path to the Python executable inside backend/venv."""
     name = "Scripts/python.exe" if os.name == "nt" else "bin/python"
     return VENV_DIR / name
-
-
-def runtime_python() -> Path:
-    """Interpreter used to run uvicorn (platform Python on CAI, else backend/venv)."""
-    if use_platform_python():
-        return Path(sys.executable)
-    return ensure_venv()
 
 
 def has_npm() -> bool:
