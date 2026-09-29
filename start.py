@@ -44,6 +44,13 @@ HOST = "127.0.0.1"
 DEV_API_PORT = 8000
 APP_PORT = int(os.environ.get("CDSW_APP_PORT", "5173"))
 ON_CLOUDERA_AI = "CDSW_APP_PORT" in os.environ
+# Cloudera workbench sessions and Applications already provide a Python environment.
+_CLOUDERA_ENV_MARKERS = (
+    "CDSW_APP_PORT",
+    "CDSW_PROJECT",
+    "CDSW_DOMAIN",
+    "CDSW_PUBLIC_URL",
+)
 
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -57,10 +64,29 @@ def log(message: str) -> None:
 # ── Environment detection ─────────────────────────────────────────────────────
 
 
+def use_platform_python() -> bool:
+    """
+    True on Cloudera AI / CDSW: use the session's Python, not backend/venv.
+
+    Set BEDROCK_PLAYGROUND_USE_VENV=1 to force a local-style venv (mainly for testing).
+    """
+    force_venv = os.environ.get("BEDROCK_PLAYGROUND_USE_VENV", "").lower()
+    if force_venv in ("1", "true", "yes"):
+        return False
+    return any(marker in os.environ for marker in _CLOUDERA_ENV_MARKERS)
+
+
 def venv_python() -> Path:
     """Return the path to the Python executable inside backend/venv."""
     name = "Scripts/python.exe" if os.name == "nt" else "bin/python"
     return VENV_DIR / name
+
+
+def runtime_python() -> Path:
+    """Interpreter used to run uvicorn (platform Python on CAI, else backend/venv)."""
+    if use_platform_python():
+        return Path(sys.executable)
+    return ensure_venv()
 
 
 def has_npm() -> bool:
@@ -89,9 +115,12 @@ def pip_env() -> dict[str, str]:
     """
     Build a subprocess environment for pip.
 
-    CAI sets PIP_USER=1 which breaks installs into a venv; force PIP_USER=0.
+    On local venv installs, CAI's PIP_USER=1 can break the venv; force PIP_USER=0.
+    On CAI we install into the platform environment and leave PIP_USER unchanged.
     """
     env = os.environ.copy()
+    if use_platform_python():
+        return env
     for key in ("PIP_USER", "PIP_USER_SITE"):
         env.pop(key, None)
     env["PIP_USER"] = "0"
@@ -105,27 +134,90 @@ def run_checked(cmd: list[str], cwd: Path) -> None:
     subprocess.run(cmd, cwd=cwd, check=True, env=pip_env())
 
 
+def venv_pip_ok(python: Path) -> bool:
+    """True when the venv's pip module runs (not a partial/corrupt install)."""
+    result = subprocess.run(
+        [str(python), "-m", "pip", "--version"],
+        cwd=BACKEND_DIR,
+        env=pip_env(),
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def remove_venv() -> None:
+    """Delete backend/venv so the next ensure_venv() creates a clean environment."""
+    if VENV_DIR.exists():
+        log("removing broken backend/venv")
+        shutil.rmtree(VENV_DIR)
+
+
+def bootstrap_pip(python: Path) -> None:
+    """Install or repair pip inside the venv using ensurepip."""
+    run_checked([str(python), "-m", "ensurepip", "--upgrade"], BACKEND_DIR)
+
+
 def ensure_venv() -> Path:
     """Create backend/venv if needed and return the venv Python path."""
+    python = venv_python()
+    if VENV_DIR.exists() and python.exists() and not venv_pip_ok(python):
+        remove_venv()
+        python = venv_python()
+
     if not VENV_DIR.exists():
         log("creating backend/venv")
         run_checked([sys.executable, "-m", "venv", str(VENV_DIR)], BACKEND_DIR)
+        python = venv_python()
 
-    python = venv_python()
     if not python.exists():
         raise RuntimeError(f"venv python not found at {python}")
+
+    if not venv_pip_ok(python):
+        log("bootstrapping pip in backend/venv")
+        bootstrap_pip(python)
+
+    if not venv_pip_ok(python):
+        remove_venv()
+        log("creating backend/venv")
+        run_checked([sys.executable, "-m", "venv", str(VENV_DIR)], BACKEND_DIR)
+        python = venv_python()
+        bootstrap_pip(python)
+
+    if not venv_pip_ok(python):
+        raise RuntimeError(
+            "pip is not usable in backend/venv. Delete backend/venv manually and retry."
+        )
+
     return python
 
 
 def install_python(skip: bool) -> Path:
-    """Ensure venv exists and install root requirements.txt unless skipped."""
+    """Install requirements into the platform env (CAI) or backend/venv (local)."""
+    if use_platform_python():
+        python = Path(sys.executable)
+        if skip:
+            log(f"using platform Python ({python})")
+            return python
+        requirements = ROOT / "requirements.txt"
+        log(f"installing Python packages from {requirements.name} into platform environment")
+        run_checked([str(python), "-m", "pip", "install", "-r", str(requirements)], ROOT)
+        return python
+
     if skip:
         return ensure_venv()
 
     python = ensure_venv()
     requirements = ROOT / "requirements.txt"
     log(f"installing Python packages from {requirements.name} into backend/venv")
-    run_checked([str(python), "-m", "pip", "install", "--upgrade", "pip"], BACKEND_DIR)
+    try:
+        run_checked([str(python), "-m", "pip", "install", "--upgrade", "pip"], BACKEND_DIR)
+    except subprocess.CalledProcessError:
+        log("pip upgrade failed; recreating backend/venv and retrying")
+        remove_venv()
+        python = ensure_venv()
+        run_checked([str(python), "-m", "pip", "install", "--upgrade", "pip"], BACKEND_DIR)
+
     run_checked([str(python), "-m", "pip", "install", "-r", str(requirements)], ROOT)
     return python
 
@@ -187,10 +279,11 @@ def wait_for_api(port: int, timeout: float = 120) -> None:
     """Poll /api/health until the backend responds or timeout is reached."""
     url = f"http://{HOST}:{port}/api/health"
     deadline = time.time() + timeout
+    request = urllib.request.Request(url, headers={"Connection": "close"})
 
     while time.time() < deadline:
         try:
-            with urllib.request.urlopen(url, timeout=2) as response:
+            with urllib.request.urlopen(request, timeout=5) as response:
                 if response.status == 200:
                     log(f"ready at {url}")
                     return

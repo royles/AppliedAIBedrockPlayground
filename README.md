@@ -63,7 +63,7 @@ Requires **Python 3.10+** and **Node.js/npm**.
 
 **On Cloudera AI** (no npm):
 
-1. **Install** — `pip install` into `backend/venv`
+1. **Install** — `pip install -r requirements.txt` into the **platform Python environment** (no `backend/venv` on CAI)
 2. **Serve** — FastAPI on `CDSW_APP_PORT` serves `/api` and the built UI from `frontend/dist`
 
 **Local dev** (with npm):
@@ -125,7 +125,7 @@ In Cloudera AI → **Applications** → **New Application**:
 
 `entry.py` is a thin wrapper that calls `start.py`. On CAI the script will:
 
-1. Install Python deps into `backend/venv`
+1. Install Python deps into the **active session / application Python environment**
 2. Start FastAPI on `127.0.0.1:$CDSW_APP_PORT` (API + static UI from `frontend/dist`)
 
 To rebuild the UI after frontend changes (on a machine with Node.js):
@@ -153,7 +153,7 @@ Commit the updated `frontend/dist` folder.
 | `CDSW_DOMAIN`   | Used by Vite in local dev only |
 
 
-On CAI, `start.py` does **not** use npm. Python packages install into `backend/venv`. If a previous install failed, delete `backend/venv` and restart.
+On CAI, `start.py` does **not** use npm or `backend/venv`; it uses the interpreter already provided by the platform (`sys.executable`). If installs fail, fix the project/session Python environment or re-run `pip install -r requirements.txt` in a Workbench terminal.
 
 ### Manual setup
 
