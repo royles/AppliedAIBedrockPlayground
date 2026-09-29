@@ -301,6 +301,8 @@ curl -X POST http://localhost:8000/api/chat \
 
 ## Configuration
 
+LLM provider settings (Bedrock vs local, model, region, local endpoint) are **persisted in SQLite** under `backend/data/playground.db` when you update them via `PUT /api/config`. Local LLM API tokens are **encrypted at rest** (Fernet). The API never returns token values—only `local_token_configured: true/false`.
+
 Environment variables (backend only):
 
 | Variable                | Description                          |
@@ -311,6 +313,8 @@ Environment variables (backend only):
 | `AWS_REGION`            | Default AWS region                   |
 | `DEFAULT_MODEL_ID`      | Initial Bedrock model                |
 | `CORS_ORIGINS`          | Allowed frontend origins             |
+| `CONFIG_DB_PATH`        | Optional SQLite path for LLM config  |
+| `CONFIG_ENCRYPTION_KEY` | Optional Fernet key for token encryption (recommended in production) |
 
 ## Supported Models
 
