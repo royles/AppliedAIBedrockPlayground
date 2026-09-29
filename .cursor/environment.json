@@ -1,0 +1,21 @@
+{
+  "name": "Applied AI Bedrock Playground",
+  "install": "bash .cursor/install.sh",
+  "ports": [
+    {
+      "name": "bedrock-playground-ui",
+      "port": 5173
+    },
+    {
+      "name": "bedrock-playground-api",
+      "port": 8000
+    }
+  ],
+  "terminals": [
+    {
+      "name": "bedrock-playground",
+      "command": "python3 start.py --skip-install",
+      "description": "Bedrock Playground (Vite dev UI on 5173, API on 8000 when npm is available; otherwise serves pre-built UI from dist)."
+    }
+  ]
+}
